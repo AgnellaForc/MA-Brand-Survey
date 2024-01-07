@@ -1,7 +1,7 @@
 ## Reserach Project: Store brands vs. manufacturer brands
 # By Group 1B 
 getwd()
-brand_survey <- read.csv("/Users/mario/Download/brand_survey.csv", header = TRUE,
+brand_survey <- read.csv("./brand_survey.csv", header = TRUE,
                       sep = ";")
 head(test_data)
 
