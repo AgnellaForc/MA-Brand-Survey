@@ -125,12 +125,52 @@ summary(m2)
 exp(coef(m2))
   
 # Assumptions: 
-  # Influential observations: we use Cook’s Distance.
-  plot(m2, 4) #no obs near 1
+  # YES Influential observations
+#1. Cook's distance
+  plot(m2, 4) #visualize the Cook’s distance values
+  #no obs near 1
+#2. Standardized residuals
+  #Data points with an absolute standardized residuals above 3 represent possible outliers
+library(broom)
+  model.data <- augment(m2) %>% 
+    mutate(index = 1:n())  
+  model.data %>% top_n(3, .cooksd) #top 3 largest values
+  ggplot(model.data, aes(index, .std.resid)) + 
+    geom_point(aes(color = did_change_store), alpha = .5) +
+    theme_bw() #plot standardized residuals 
+  model.data %>% 
+    filter(abs(.std.resid) > 3) #filter potential influential data points
+  
   plot(m2, 5) #no groups of obs in the upper or lower right corner
-# Non-linear relationships: we use the added variable plots. 
-  avPlots(m2, col.lines = palette()[2]) #is it normal that the relationships are not linear bc we are using a logistic model?
-# Heteroscedasticity: we use the residuals plot. 
+  
+# YES Non-linear relationships: we use the added variable plots. 
+  avPlots(m2, col.lines = palette()[2]) #NO, use log odds 
+
+#Inspecting the scatter plot between each predictor and the logit values.
+#predict the probabilites p 
+  probabilities <- predict(m2, type = "response")
+  predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg")
+  head(predicted.classes)
+  # Bind the logit and tidying the data for plot
+  library(tidyr) 
+  mydata <- brand_survey %>%
+    mutate(logit = log(probabilities/(1-probabilities))) %>%
+    gather(key = "predictors", value = "predictor.value", -logit)  
+ 
+  # Get predicted probabilities from the model
+  predicted_probs <- predict(m2, type = "response")
+  
+  # Calculate predicted log odds from predicted probabilities
+  predicted_log_odds <- log(predicted_probs / (1 - predicted_probs))
+ 
+  new_dataset <- brand_survey %>%
+    filter(!is.na(did_change_store)) #exclude NA from the variable did_change_store
+  
+  # Create scatter plot for 'group' variable
+  plot(new_dataset$group, predicted_log_odds, xlab = "Group", ylab = "Predicted Log Odds", main = "Scatter Plot: Group vs. Log Odds")
+  
+  
+   # NO Heteroscedasticity: we use the residuals plot. 
   plot(m2, 1)
   library(lmtest) #Breusch-Pagan test
   bptest(m2) 
@@ -138,7 +178,8 @@ exp(coef(m2))
 #solution: transform the data (robust regression methods)
   library(sandwich)
   coeftest(m2, vcov = vcovHC(m2)) 
-  # Non-normally distributed errors: we use the Q-Q plot.
+ 
+   #NO Non-normally distributed errors: we use the Q-Q plot.
   plot(m2, 2)
   shapiro.test(resid(m2)) #Shapiro Wilk test
   #pvalue < 0.05: reject the null hypothesis of normal distribution of errors
@@ -182,8 +223,9 @@ brand_survey<- na.omit(brand_survey)
 bootstrap_results <- boot(data = brand_survey, statistic = calculate_residuals, R = 1000)
 summary(bootstrap_results)
 
-# Correlation of errors: We actually wouldn’t need to test this assumption here since there is not natural order in the data.
-# Multicollinearity: we first test the bivariate correlations for any extremely high correlations (i.e., >0.8).
+# NO Correlation of errors: We actually wouldn’t need to test this assumption here since there is not natural order in the data.
+
+#YES Multicollinearity: we first test the bivariate correlations for any extremely high correlations (i.e., >0.8).
   rcorr(as.matrix(brand_survey[, c("did_change_store", "share_groceries")]))
 #secondly we look at the VIF values
   library(car)
@@ -191,7 +233,7 @@ summary(bootstrap_results)
   #two VIF values are higher that the threshold of 4
 #solution: variable selection procedures or principal component analysis
   
-# 3. Model A: we now want to know, wheter a strong preference for the brand milka has a significant impact.
+# 3. Model A: we now want to know, whether a strong preference for the brand milka has a significant impact.
 # For that we take the column "scale_milka" and only select values higher than 3 (meaning they like Milka):
 brand_survey$milka_pref <- as.factor(ifelse(as.numeric(brand_survey$scale_milka)>3,1,0))
 table(brand_survey$milka_pref)
@@ -217,7 +259,7 @@ exp(coef(m4))
 # Testing for the best model: group, share groceries, milka preference, strong reaction and interaction terms
 bestmodel_AIC <- glm(did_change_store ~ group + share_groceries + milka_pref + strong_reaction + group:share_groceries + group:milka_pref + group:strong_reaction , family = binomial(link="logit"), data = brand_survey)
 model_AIC <- step(bestmodel_AIC) 
-# Best model fit with the lowest AIC = 159.80: milka_pref (preference for the brand Milka).
+# lowest AIC: 168.88; did_change_store ~ share_groceries + milka_pref + strong_reaction
 
 # Model B
 # The second main model is focused on survey participants, who chose NOT to change store when their favorite brand is not available. 
@@ -269,16 +311,6 @@ exp(coef(m4_B))
 #assumption test!
 
 # Testing for the best model:
-m8 <- glm(buy_clever ~ group +  income_monthlz + clever_pref + share_groceries +group:income_monthlz + group:clever_pref+ group:share_groceries, family = binomial(link="logit"), data = no_churn_data)
-summary(m8) 
-#AIC: 92.373
-m9 <- glm(buy_clever ~ group + clever_pref + share_groceries  + group:clever_pref+ group:share_groceries, family = binomial(link="logit"), data = no_churn_data)
-summary(m9) 
-#AIC: 92.064 (model without monthly income)
-m10 <- glm(buy_clever ~ group +  income_monthlz +  share_groceries +group:income_monthlz + group:share_groceries, family = binomial(link="logit"), data = no_churn_data)
-summary(m10) 
-#AIC: 96.996 (model without clever preference)
-m11 <- glm(buy_clever ~ group +  income_monthlz + clever_pref +group:income_monthlz + group:clever_pref, family = binomial(link="logit"), data = no_churn_data)
-summary(m11) 
-#AIC: 97.813 (model without share grocieries)
-# Best model fit with the lowest AIC = 92.064: m9
+bestmodelB_AIC <- glm(buy_clever ~ group + share_groceries + clever_pref + indifference + group:share_groceries + group:clever_pref + group:indifference , family = binomial(link="logit"), data = no_churn_data)
+model_AIC <- step(bestmodelB_AIC) 
+#lowest AIC = 86.72: buy_clever ~ group + share_groceries + clever_pref + group:share_groceries + group:clever_pref
