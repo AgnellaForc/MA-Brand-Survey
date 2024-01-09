@@ -147,15 +147,7 @@ library(broom)
   avPlots(m2, col.lines = palette()[2]) #NO, use log odds 
 
 #Inspecting the scatter plot between each predictor and the logit values.
-#predict the probabilites p 
-  probabilities <- predict(m2, type = "response")
-  predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg")
-  head(predicted.classes)
-  # Bind the logit and tidying the data for plot
-  library(tidyr) 
-  mydata <- brand_survey %>%
-    mutate(logit = log(probabilities/(1-probabilities))) %>%
-    gather(key = "predictors", value = "predictor.value", -logit)  
+ 
  
   # Get predicted probabilities from the model
   predicted_probs <- predict(m2, type = "response")
@@ -169,61 +161,6 @@ library(broom)
   # Create scatter plot for 'group' variable
   plot(new_dataset$group, predicted_log_odds, xlab = "Group", ylab = "Predicted Log Odds", main = "Scatter Plot: Group vs. Log Odds")
   
-  
-   # NO Heteroscedasticity: we use the residuals plot. 
-  plot(m2, 1)
-  library(lmtest) #Breusch-Pagan test
-  bptest(m2) 
-    #pvalue < 0.05: reject the null hypothesis of equal error variances (ie homoskedasticity not met)
-#solution: transform the data (robust regression methods)
-  library(sandwich)
-  coeftest(m2, vcov = vcovHC(m2)) 
- 
-   #NO Non-normally distributed errors: we use the Q-Q plot.
-  plot(m2, 2)
-  shapiro.test(resid(m2)) #Shapiro Wilk test
-  #pvalue < 0.05: reject the null hypothesis of normal distribution of errors
-#solution: (1) log-log transformation 
-  brand_survey$log_share_groceries <- log(brand_survey$share_groceries)
-  brand_survey$log_did_change_store <- log(brand_survey$did_change_store)
-  m2_loglog <- glm(log_did_change_store ~ group + log_share_groceries + group:log_share_groceries,
-                   family = binomial(link = "logit"), data = brand_survey)
-shapiro.test(resid(m2_loglog)) #pvalue < 0.05
-#solution: (2) bootstrapping
-library(boot)
-# Define a function to calculate residuals for bootstrapping
-calculate_residuals <- function(data, indices) {
-  sampled_data <- data[indices, ]
-  model <- glm(did_change_store ~ group + share_groceries + group:share_groceries,
-               family = binomial(link = "logit"),
-               data = sampled_data)
-  residuals <- resid(model, type = "response")
-  return(residuals)
-}
-
-# Ensure the length of residuals matches the number of observations
-if(length(residuals) != nrow(brand_survey)) {
-  stop("Length of residuals does not match the number of observations.")
-}
-
-return(residuals)
-
-# Test if the number of observations is equal to the number of residuals
-observations_equal_to_residuals <- length(brand_survey$did_change_store) == length(residuals)
-
-# Output the result
-observations_equal_to_residuals #FALSE
-
-#exclude NA??? 
-calculate_residuals <-na.omit(calculate_residuals)
-residuals <- na.omit(residuals)
-brand_survey<- na.omit(brand_survey)
-
-# Perform bootstrapping
-bootstrap_results <- boot(data = brand_survey, statistic = calculate_residuals, R = 1000)
-summary(bootstrap_results)
-
-# NO Correlation of errors: We actually wouldn’t need to test this assumption here since there is not natural order in the data.
 
 #YES Multicollinearity: we first test the bivariate correlations for any extremely high correlations (i.e., >0.8).
   rcorr(as.matrix(brand_survey[, c("did_change_store", "share_groceries")]))
